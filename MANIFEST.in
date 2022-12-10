@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include navari_demo_app *.css
+recursive-include navari_demo_app *.csv
+recursive-include navari_demo_app *.html
+recursive-include navari_demo_app *.ico
+recursive-include navari_demo_app *.js
+recursive-include navari_demo_app *.json
+recursive-include navari_demo_app *.md
+recursive-include navari_demo_app *.png
+recursive-include navari_demo_app *.py
+recursive-include navari_demo_app *.svg
+recursive-include navari_demo_app *.txt
+recursive-exclude navari_demo_app *.pyc
