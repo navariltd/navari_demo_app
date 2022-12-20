@@ -6,6 +6,14 @@ frappe.query_reports["Opportunity Sales Projections"] = {
 	
 	"filters": [
 		{
+			fieldname: "company",
+			label: __("Company"),
+			fieldtype: "Link",
+			options: "Company",
+			default: frappe.defaults.get_user_default("Company"),
+			reqd: 1
+		},
+		{
 			fieldname: "from_date",
 			label: __("From Date"),
 			fieldtype: "Date",
@@ -20,13 +28,6 @@ frappe.query_reports["Opportunity Sales Projections"] = {
 			reqd: 1
 		},
 		{
-			fieldname: "opportunity_id",
-			label: __("Opportunity"),
-			fieldtype: "Link",
-			options: "Opportunity",
-			reqd: 0
-		},
-		{
 			fieldname: "opportunity_owner",
 			label: __("Opportunity owner"),
 			fieldtype: "Link",
@@ -34,12 +35,11 @@ frappe.query_reports["Opportunity Sales Projections"] = {
 			reqd: 0
 		},
 		{
-			fieldname: "company",
-			label: __("Company"),
+			fieldname: "opportunity_id",
+			label: __("Opportunity"),
 			fieldtype: "Link",
-			options: "Company",
-			default: frappe.defaults.get_user_default("Company"),
-			reqd: 1
+			options: "Opportunity",
+			reqd: 0
 		}
 	]
 };

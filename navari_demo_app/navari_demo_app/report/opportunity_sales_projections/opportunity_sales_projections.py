@@ -11,22 +11,22 @@ def execute(filters=None):
 	return get_columns(), get_data(filters)
 
 def get_data(filters):
-	from_date, to_date, opportunity_id, opportunity_owner, company = filters.get('from_date'), filters.get('to_date'), filters.get('opportunity_id'), filters.get('opportunity_owner'), filters.get('company')
+	company, from_date, to_date, opportunity_owner, opportunity_id = filters.get('company'), filters.get('from_date'), filters.get('to_date'), filters.get('opportunity_owner'), filters.get('opportunity_id')
 
 	# conditions (used with filters)
 	conditions = " AND 1=1 "
-	if(filters.get('opportunity_id')):
-		conditions += f" AND name LIKE '%{opportunity_id}'"
-	if(filters.get('opportunity_owner')):
-		conditions += f" AND opportunity_owner = '{opportunity_owner}'"
+	
 	if(filters.get('company')):
 		conditions += f" AND company = '{company}'"
-
+	if(filters.get('opportunity_owner')):
+		conditions += f" AND opportunity_owner = '{opportunity_owner}'"
+	if(filters.get('opportunity_id')):
+		conditions += f" AND name LIKE '%{opportunity_id}'"
 
 	opportunities = frappe.db.sql(f"""
 		SELECT opportunity_owner, name, expected_closing, lead_time_days
 		FROM `tabOpportunity`
-		WHERE (transaction_date BETWEEN '{from_date}' AND '{to_date}') {conditions}
+		WHERE (expected_closing BETWEEN '{from_date}' AND '{to_date}') {conditions}
 	""", as_dict = 1)
 
 	# Create list, equal length as rows fetched
@@ -39,11 +39,11 @@ def get_data(filters):
 		report_details[opportunities.index(opportunity)].append(recommended_purchase_date)
 
 		# item_details is a multidimensional array, fixing this to appear on UI
-		item_details = frappe.db.sql(f"""SELECT item_code, item_name, SUM(qty) as qty, uom FROM `tabOpportunity Item` WHERE parent = '{opportunity.name}' GROUP BY item_code;""", as_list = 1)
+		item_details = frappe.db.sql(f"""SELECT item_code, item_name, uom, SUM(qty) as qty FROM `tabOpportunity Item` WHERE parent = '{opportunity.name}' GROUP BY item_code, item_name, uom;""", as_list = 1)
 		report_details[opportunities.index(opportunity)].append(item_details)
 
-		# Fetch lead time data, transpose rows ro columns.
-		lead_details = frappe.db.sql(f"""
+		# Fetch lead time data, transpose rows to columns.
+		lead_time_details = frappe.db.sql(f"""
 			SELECT
 				MAX(CASE WHEN `tabOpportunity Lead Time Item`.lead_time_category = 'Supply' THEN `tabOpportunity Lead Time Item`.lead_time_in_days END)  AS 'Supply',
 				MAX(CASE WHEN `tabOpportunity Lead Time Item`.lead_time_category = 'Shipping' THEN `tabOpportunity Lead Time Item`.lead_time_in_days END) AS 'Shipping',
@@ -51,11 +51,11 @@ def get_data(filters):
 				FROM `tabOpportunity Lead Time Item`
 				WHERE parent = '{opportunity.name}';
 		""", as_list = 1)
-		lead_details = lead_details[0]
+		lead_time_details = lead_time_details[0]
 		# Adding Supply, Shipping and Port Clearance days to the list, in that order
-		report_details[opportunities.index(opportunity)].append(lead_details[0])
-		report_details[opportunities.index(opportunity)].append(lead_details[1])
-		report_details[opportunities.index(opportunity)].append(lead_details[2])
+		report_details[opportunities.index(opportunity)].append(lead_time_details[0])
+		report_details[opportunities.index(opportunity)].append(lead_time_details[1])
+		report_details[opportunities.index(opportunity)].append(lead_time_details[2])
 
 	return report_details
 
