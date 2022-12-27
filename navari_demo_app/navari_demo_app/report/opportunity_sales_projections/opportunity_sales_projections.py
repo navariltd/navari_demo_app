@@ -5,6 +5,12 @@ import frappe
 from frappe import _, scrub
 from frappe.utils import add_to_date
 
+lead_time_categories = frappe.db.sql(f"""
+	SELECT DISTINCT lead_time_category as Category
+	FROM `tabOpportunity Lead Time Item`
+	ORDER BY Category ASC;
+""", as_dict = 1)
+
 def execute(filters=None):
 	if filters.from_date > filters.to_date:
 		frappe.throw(_("From Date cannot be greater than To Date"))
@@ -12,124 +18,144 @@ def execute(filters=None):
 
 def get_data(filters):
 	company, from_date, to_date, opportunity_owner, opportunity_id = filters.get('company'), filters.get('from_date'), filters.get('to_date'), filters.get('opportunity_owner'), filters.get('opportunity_id')
+	report_details = []
 
-	# conditions (used with filters)
 	conditions = " AND 1=1 "
 	
-	if(filters.get('company')):
-		conditions += f" AND company = '{company}'"
-	if(filters.get('opportunity_owner')):
-		conditions += f" AND opportunity_owner = '{opportunity_owner}'"
-	if(filters.get('opportunity_id')):
-		conditions += f" AND name LIKE '%{opportunity_id}'"
+	if(company):
+		conditions += f" AND opp.company = '{company}'"
+	if(opportunity_owner):
+		conditions += f" AND opp.opportunity_owner = '{opportunity_owner}'"
+	if(opportunity_id):
+		conditions += f" AND opp.name LIKE '%{opportunity_id}'"
 
 	opportunities = frappe.db.sql(f"""
-		SELECT opportunity_owner, name, expected_closing, lead_time_days
-		FROM `tabOpportunity`
-		WHERE (expected_closing BETWEEN '{from_date}' AND '{to_date}') {conditions}
+		SELECT opp.company as "company",
+			opp.name as "name",
+			opp.contact_person as "contact_person",
+			opp.customer_name as "customer_name",
+			opp.opportunity_owner as "opportunity_owner",
+			opp.expected_closing as "expected_closing",
+			opp.lead_time_days as "lead_time_days",
+			DATE_SUB(opp.expected_closing, INTERVAL IFNULL(opp.lead_time_days,0) DAY) as "recommended_purchase_date",
+			opp_item.item_code as "item",
+			opp_item.uom as "uom",
+			opp_item.qty as "qty"
+		FROM `tabOpportunity` as opp
+			INNER JOIN `tabOpportunity Item` as opp_item ON opp_item.parent = opp.name
+		WHERE (opp.expected_closing BETWEEN '{from_date}' AND '{to_date}') {conditions}
+		ORDER BY opp.expected_closing;
 	""", as_dict = 1)
 
-	# Create list, equal length as rows fetched
-	report_details = [None] * len(opportunities)
-
 	for opportunity in opportunities:
-		report_details[opportunities.index(opportunity)] = list(opportunity.values())
+		report_details.append(opportunity)
 
-		recommended_purchase_date = add_to_date(opportunity.expected_closing, days = -abs(opportunity.lead_time_days), as_datetime=True)
-		report_details[opportunities.index(opportunity)].append(recommended_purchase_date)
+		categories = frappe.db.sql(f"""
+			SELECT lead_time_category as Category
+			FROM `tabOpportunity Lead Time Item` WHERE parent = '{opportunity.name}' ORDER BY Category ASC;
+		""", as_dict = 1)
 
-		# item_details is a multidimensional array, fixing this to appear on UI
-		item_details = frappe.db.sql(f"""SELECT item_code, item_name, uom, SUM(qty) as qty FROM `tabOpportunity Item` WHERE parent = '{opportunity.name}' GROUP BY item_code, item_name, uom;""", as_list = 1)
-		report_details[opportunities.index(opportunity)].append(item_details)
+		if (categories):
+			query_string = "SELECT"
 
-		# Fetch lead time data, transpose rows to columns.
-		lead_time_details = frappe.db.sql(f"""
-			SELECT
-				MAX(CASE WHEN `tabOpportunity Lead Time Item`.lead_time_category = 'Supply' THEN `tabOpportunity Lead Time Item`.lead_time_in_days END)  AS 'Supply',
-				MAX(CASE WHEN `tabOpportunity Lead Time Item`.lead_time_category = 'Shipping' THEN `tabOpportunity Lead Time Item`.lead_time_in_days END) AS 'Shipping',
-				MAX(CASE WHEN `tabOpportunity Lead Time Item`.lead_time_category = 'Port Clearance' THEN `tabOpportunity Lead Time Item`.lead_time_in_days END) AS 'Port Clearance'
-				FROM `tabOpportunity Lead Time Item`
-				WHERE parent = '{opportunity.name}';
-		""", as_list = 1)
-		lead_time_details = lead_time_details[0]
-		# Adding Supply, Shipping and Port Clearance days to the list, in that order
-		report_details[opportunities.index(opportunity)].append(lead_time_details[0])
-		report_details[opportunities.index(opportunity)].append(lead_time_details[1])
-		report_details[opportunities.index(opportunity)].append(lead_time_details[2])
+			for category in categories:
+				query_string += f" MAX(CASE WHEN `tabOpportunity Lead Time Item`.lead_time_category = '{category.Category}' THEN `tabOpportunity Lead Time Item`.lead_time_in_days END)  AS '{category.Category}',"
+
+			query_string = query_string.rstrip(',')
+			query_string += f" FROM `tabOpportunity Lead Time Item` WHERE parent = '{opportunity.name}';"
+
+			lead_time_details = frappe.db.sql(f"""
+				{query_string}
+			""", as_dict = 1)
+			lead_time_details = lead_time_details[0]
+
+			for category in categories:
+				# field name  we'll use to map to a column
+				field_name = category.Category.lower().replace(" ", "_")
+				report_details[opportunities.index(opportunity)][f'{field_name}'] = lead_time_details[category.Category]
 
 	return report_details
 
 def get_columns():
-	return [
+	columns = [
 		{
-            'fieldname': 'opportunity_owner',
-            'label': _('User'),
-            'fieldtype': 'Link',
-            'options': 'User'
-        },
-		{
-            'fieldname': 'name',
-            'label': _('Opportunity'),
-            'fieldtype': 'Data',
-        },
-		{
-            'fieldname': 'expected_closing',
-            'label': _('Closing Date'),
-            'fieldtype': 'Date',
-        },
-		{
-            'fieldname': 'lead_time_days',
-            'label': _('Lead Time Days'),
-            'fieldtype': 'Int',
-        },
-		{
-            'fieldname': 'recommended_purchase_date',
-            'label': _('Recommended Purchase Date'),
-            'fieldtype': 'Date',
-        },
-		{
-			'fieldname': 'items',
-			'label': _('Items'),
-			'fieldtype': 'Table',
-			'columns': [
-				{
-					'fieldname': 'item_code',
-					'label': _('Item'),
-					'fieldtype': 'Link',
-					'options': 'Item'
-				},
-				{
-					'fieldname': 'item_name',
-					'label': _('Item Name'),
-					'fieldtype': 'Data',
-				},
-				{
-					'fieldname': 'uom',
-					'label': _('UOM'),
-					'fieldtype': 'Link',
-					'options': 'UOM'
-				},
-				{
-					'fieldname': 'qty',
-					'label': _('Qty'),
-					'fieldtype': 'Float',
-				}
-			]
+			'fieldname': 'company',
+			'label': _('Company'),
+			'fieldtype': 'Link',
+			'options': 'Company'
 		},
 		{
-            'fieldname': 'supply',
-            'label': _('Supply Days'),
-            'fieldtype': 'Int',
-        },
+			'fieldname': 'name',
+			'label': _('Opportunity'),
+			'fieldtype': 'Data',
+		},
 		{
-            'fieldname': 'shipping',
-            'label': _('Shipping Days'),
-            'fieldtype': 'Int',
-        },
+			'fieldname': 'contact_person',
+			'label': _('Contact Person'),
+			'fieldtype': 'Link',
+			'options': 'User',
+			'width': 150
+		},
 		{
-            'fieldname': 'port_clearance',
-            'label': _('Port Clearance Days'),
-            'fieldtype': 'Int',
-        }
+			'fieldname': 'customer_name',
+			'label': _('Customer Name'),
+			'fieldtype': 'Data',
+			'width': 150
+		},
+		{
+			'fieldname': 'opportunity_owner',
+			'label': _('User'),
+			'fieldtype': 'Link',
+			'options': 'User',
+			'width': 200
+		},
+		{
+			'fieldname': 'expected_closing',
+			'label': _('Closing Date'),
+			'fieldtype': 'Date',
+		},
+		{
+			'fieldname': 'lead_time_days',
+			'label': _('Lead Time Days'),
+			'fieldtype': 'Int',
+		},
+		{
+			'fieldname': 'recommended_purchase_date',
+			'label': _('Recommended Purchase Date'),
+			'fieldtype': 'Date',
+		},
+		{
+			'fieldname': 'item',
+			'label': _('Item'),
+			'fieldtype': 'Link',
+			'options': 'Item',
+			'width': 240
+		},
+		{
+			'fieldname': 'uom',
+			'label': _('UOM'),
+			'fieldtype': 'Link',
+			'options': 'UOM',
+			'width': 100
+		},
+		{
+			'fieldname': 'qty',
+			'label': _('Qty'),
+			'fieldtype': 'Float',
+			'width': 100
+		}
 	]
+
+	for category in lead_time_categories:
+		field_name = category.Category.lower().replace(" ", "_")
+		columns += [
+			{
+				"label": _(category.Category),
+				"fieldname": field_name,
+				"fieldtype": "Data",
+			}
+		]
+
+	return columns
+	
 
