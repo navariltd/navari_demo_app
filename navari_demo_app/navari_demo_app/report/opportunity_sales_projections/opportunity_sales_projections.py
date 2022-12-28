@@ -37,12 +37,8 @@ def get_data(filters):
 			opp.opportunity_owner as "opportunity_owner",
 			opp.expected_closing as "expected_closing",
 			opp.lead_time_days as "lead_time_days",
-			DATE_SUB(opp.expected_closing, INTERVAL IFNULL(opp.lead_time_days,0) DAY) as "recommended_purchase_date",
-			opp_item.item_code as "item",
-			opp_item.uom as "uom",
-			opp_item.qty as "qty"
+			DATE_SUB(opp.expected_closing, INTERVAL IFNULL(opp.lead_time_days,0) DAY) as "recommended_purchase_date"
 		FROM `tabOpportunity` as opp
-			INNER JOIN `tabOpportunity Item` as opp_item ON opp_item.parent = opp.name
 		WHERE (opp.expected_closing BETWEEN '{from_date}' AND '{to_date}') {conditions}
 		ORDER BY opp.expected_closing;
 	""", as_dict = 1)
@@ -72,7 +68,18 @@ def get_data(filters):
 			for category in categories:
 				# field name  we'll use to map to a column
 				field_name = category.Category.lower().replace(" ", "_")
-				report_details[opportunities.index(opportunity)][f'{field_name}'] = lead_time_details[category.Category]
+				opportunity[f'{field_name}'] = lead_time_details[category.Category]	
+
+		items = frappe.db.sql(f"""
+			SELECT item_code as 'item',
+				uom as 'uom',
+				qty as 'qty'
+			FROM `tabOpportunity Item` WHERE parent = '{opportunity.name}';
+		""", as_dict = 1)
+		
+		for item in items:
+			item['indent'] = 1
+			report_details.append(item)
 
 	return report_details
 
