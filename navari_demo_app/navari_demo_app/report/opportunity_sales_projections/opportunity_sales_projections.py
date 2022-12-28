@@ -87,7 +87,8 @@ def get_columns():
 		{
 			'fieldname': 'name',
 			'label': _('Opportunity'),
-			'fieldtype': 'Data',
+			'fieldtype': 'Link',
+			'options': 'Opportunity'
 		},
 		{
 			'fieldname': 'contact_person',
@@ -113,10 +114,25 @@ def get_columns():
 			'fieldname': 'expected_closing',
 			'label': _('Closing Date'),
 			'fieldtype': 'Date',
-		},
+		}
+	]
+
+	for category in lead_time_categories:
+		field_name = category.Category.lower().replace(" ", "_")
+		columns += [
+			{
+				'label': _(category.Category),
+				'fieldname': field_name,
+				'fieldtype': 'Data',
+				'width': 150
+
+			}
+		]
+
+	columns += [
 		{
 			'fieldname': 'lead_time_days',
-			'label': _('Lead Time Days'),
+			'label': _('Total Lead Time Days'),
 			'fieldtype': 'Int',
 		},
 		{
@@ -145,16 +161,6 @@ def get_columns():
 			'width': 100
 		}
 	]
-
-	for category in lead_time_categories:
-		field_name = category.Category.lower().replace(" ", "_")
-		columns += [
-			{
-				"label": _(category.Category),
-				"fieldname": field_name,
-				"fieldtype": "Data",
-			}
-		]
 
 	return columns
 	
