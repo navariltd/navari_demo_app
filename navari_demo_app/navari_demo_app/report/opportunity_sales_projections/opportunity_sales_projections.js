@@ -41,5 +41,33 @@ frappe.query_reports["Opportunity Sales Projections"] = {
 			options: "Opportunity",
 			reqd: 0
 		}
-	]
+	],
+	"formatter": function(value, row, column, data, default_formatter) {
+		value = default_formatter(value, row, column, data)
+	
+		if (column.fieldname == "recommended_purchase_date") {
+			if(value) {
+				let date_array = value.split("-")
+				let [day, month, year] = date_array
+				// re-arrange date fornat so we can pass to new Date() function
+				let date_string = `${year}-${month}-${day}`
+				let recommended_purchase_date = new Date(date_string)
+				let today = new Date()
+				
+
+				if(recommended_purchase_date.getTime() < today.getTime()) {
+					value = "<span style='color:red;'>" + value + "</span>"
+				}
+
+				if(recommended_purchase_date.getTime() > today.getTime()) {
+					value = "<span style='color:green;'>" + value + "</span>"
+				}
+
+				if(recommended_purchase_date.getTime() == today.getTime()) {
+					value = "<span style='color:orange;'>" + value + "</span>"
+				}
+			}
+		}
+		return value
+	}
 };
