@@ -76,10 +76,15 @@ def get_data(filters):
 				qty as 'qty'
 			FROM `tabOpportunity Item` WHERE parent = '{opportunity.name}';
 		""", as_dict = 1)
+		# item line qty (sum all item qty for an opportunity)
+		total_qty = 0
 		
 		for item in items:
+			total_qty += int(item['qty'])
 			item['indent'] = 1
 			report_details.append(item)
+		opportunity['qty'] = total_qty
+		total_qty = 0
 
 	return report_details
 
